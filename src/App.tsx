@@ -37,6 +37,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAllData, setShowAllData] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(false);
   const [filters, setFilters] = useState<FilterState>({
     type: 'all',
     status: '',
@@ -205,6 +206,68 @@ function App() {
     }
   }
 
+  // Mobile Flight Card Component
+  const FlightCard = ({ flight }: { flight: FlightData }) => (
+    <div className="bg-white rounded-lg shadow-md p-4 mb-4 border border-gray-200">
+      {/* Flight Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center space-x-3">
+          <img
+            src={getAirlineLogo(flight.CHOPER || '')}
+            alt="Airline Logo"
+            className="w-10 h-10 object-cover rounded"
+          />
+          <div>
+            <div className="font-bold text-lg text-gray-900">{flight.CHFLTN}</div>
+            <div className="text-sm text-gray-500">{flight.CHOPER || '-'}</div>
+          </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          {getFlightStatusIcon(flight.CHRMINE || 'unknown')}
+        </div>
+      </div>
+
+      {/* Flight Details */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-600">Operator:</span>
+          <span className="text-sm text-gray-900">{flight.CHOPERD || '-'}</span>
+        </div>
+        
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-600">Destination:</span>
+          <div className="flex items-center space-x-1">
+            {getCountryFlag(flight.CHLOCCT) && (
+              <img src={getCountryFlag(flight.CHLOCCT) as string} alt={`${flight.CHLOCCT} flag`} className="w-4 h-3 object-cover" />
+            )}
+            <span className="text-sm text-gray-900">{flight.CHLOC1T}, {flight.CHLOCCT}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-600">Terminal:</span>
+          <span className="text-sm text-gray-900">{flight.CHLOC1} - {flight.CHLOC1D}</span>
+        </div>
+
+        {/* Timing */}
+        <div className="border-t pt-2 mt-2">
+          <div className="flex flex-col space-y-1">
+            <div className="flex justify-between">
+              <span className="text-sm font-medium text-gray-600">Scheduled:</span>
+              <span className="text-sm text-gray-900">{formatDateTime(flight.CHSTOL)}</span>
+            </div>
+            {flight.CHPTOL && flight.CHPTOL !== '' && (
+              <div className="flex justify-between">
+                <span className="text-sm font-medium text-gray-600">Actual:</span>
+                <span className="text-sm font-semibold text-blue-700">{formatDateTime(flight.CHPTOL)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -216,12 +279,21 @@ function App() {
               <h1 className="text-2xl font-bold">Krikov Flight Tracker</h1>
             </div>
             <div className="flex flex-col items-center space-y-2">
-              <button
-                onClick={() => fetchFlights()}
-                className="bg-blue-500 hover:bg-blue-400 px-4 py-2 rounded-lg text-sm"
-              >
-                Refresh Data
-              </button>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => fetchFlights()}
+                  className="bg-blue-500 hover:bg-blue-400 px-4 py-2 rounded-lg text-sm"
+                >
+                  Refresh Data
+                </button>
+                <button
+                  onClick={() => setIsMobileView(!isMobileView)}
+                  className="bg-blue-500 hover:bg-blue-400 px-4 py-2 rounded-lg text-sm md:hidden"
+                  title="Toggle view"
+                >
+                  {isMobileView ? 'Table' : 'Cards'}
+                </button>
+              </div>
               <p className="text-sm text-gray-200">
                 Showing: {filteredFlights.length} / {flights.length} flights
                 {searchTerm && ` (searching: "${searchTerm}")`}
@@ -286,7 +358,7 @@ function App() {
           </div>
         </div>
 
-        {/* Flights Table */}
+        {/* Flights Display - Responsive */}
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
@@ -295,95 +367,103 @@ function App() {
         ) : error ? (
           <div className="text-center py-8 text-red-500">{error}</div>
         ) : (
-          <div className="bg-white rounded-lg shadow-md overflow-x-auto">
-            <table key={`table-${searchTerm}-${filteredFlights.length}`} className="min-w-full table-auto divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Flight No'
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Flight Code
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Flight Operator
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Country
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    City
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Terminal Code
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Terminal
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Timing {/* Changed header text here */}
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredFlights.map((flight, index) => (
-                  <tr key={`${flight.CHFLTN}-${index}-${searchTerm}`} className="hover:bg-gray-100">
-                    <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {flight.CHFLTN}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {flight.CHOPER || '-'}
-                    </td>
-                    <td className="px-2 py-4 whitespace-normal text-sm text-gray-500">
-                      <div className="flex items-center space-x-2">
-                        <img
-                          src={getAirlineLogo(flight.CHOPER || '')}
-                          alt="Airline Logo"
-                          className="w-12 h-12 object-cover"
-                        />
-                        <span>{flight.CHOPERD || '-'}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex items-center">
-                        {getCountryFlag(flight.CHLOCCT) && (
-                          <img src={getCountryFlag(flight.CHLOCCT) as string} alt={`${flight.CHLOCCT} flag`} className="w-6 h-4 object-cover border border-gray-800" />
-                        )}
-                        <span className="ml-1">{flight.CHLOCCT}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {flight.CHLOC1T}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {flight.CHLOC1}
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {flight.CHLOC1D}
-                    </td>
-                    {/* Combined Scheduled and Actual Time - formatted */}
-                    <td className="px-3 py-4 text-sm text-gray-700">
-                      <div className="flex flex-col">
-                        <span>ST: {formatDateTime(flight.CHSTOL)}</span>
-                        {flight.CHPTOL && flight.CHPTOL !== '' && (
-                          <span className="font-semibold text-blue-700">AT: {formatDateTime(flight.CHPTOL)}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex items-center space-x-2">
-                        {getFlightStatusIcon(flight.CHRMINE || 'unknown')}
-                        {/* Removed: <span>{flight.CHRMINE}</span> */}
-                      </div>
-                    </td>
+          <>
+            {/* Desktop Table View - Hidden on mobile */}
+            <div className="hidden md:block bg-white rounded-lg shadow-md overflow-x-auto">
+              <table key={`table-${searchTerm}-${filteredFlights.length}`} className="min-w-full table-auto divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Flight No'
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Flight Code
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Flight Operator
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Country
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      City
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Terminal Code
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Terminal
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Timing
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredFlights.map((flight, index) => (
+                    <tr key={`${flight.CHFLTN}-${index}-${searchTerm}`} className="hover:bg-gray-100">
+                      <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {flight.CHFLTN}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {flight.CHOPER || '-'}
+                      </td>
+                      <td className="px-2 py-4 whitespace-normal text-sm text-gray-500">
+                        <div className="flex items-center space-x-2">
+                          <img
+                            src={getAirlineLogo(flight.CHOPER || '')}
+                            alt="Airline Logo"
+                            className="w-8 h-8 object-cover"
+                          />
+                          <span>{flight.CHOPERD || '-'}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div className="flex items-center">
+                          {getCountryFlag(flight.CHLOCCT) && (
+                            <img src={getCountryFlag(flight.CHLOCCT) as string} alt={`${flight.CHLOCCT} flag`} className="w-6 h-4 object-cover border border-gray-800" />
+                          )}
+                          <span className="ml-1">{flight.CHLOCCT}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {flight.CHLOC1T}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {flight.CHLOC1}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {flight.CHLOC1D}
+                      </td>
+                      <td className="px-3 py-4 text-sm text-gray-700">
+                        <div className="flex flex-col">
+                          <span>ST: {formatDateTime(flight.CHSTOL)}</span>
+                          {flight.CHPTOL && flight.CHPTOL !== '' && (
+                            <span className="font-semibold text-blue-700">AT: {formatDateTime(flight.CHPTOL)}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div className="flex items-center space-x-2">
+                          {getFlightStatusIcon(flight.CHRMINE || 'unknown')}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View - Visible on mobile */}
+            <div className="md:hidden">
+              {filteredFlights.map((flight, index) => (
+                <FlightCard key={`${flight.CHFLTN}-${index}-mobile`} flight={flight} />
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>
