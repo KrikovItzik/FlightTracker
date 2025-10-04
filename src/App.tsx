@@ -92,7 +92,7 @@ function App() {
     const flightCode = String(flight.CHOPER || '').toLowerCase();
     const flightOperator = String(flight.CHOPERD || '').toLowerCase();
 
-    const matchesSearch = searchTerm === '' ||
+    const matchesSearch = searchTerm === '' || searchTerm.length < 2 ||
       flightNumber.startsWith(searchLower) ||
       flightCode.startsWith(searchLower) ||
       flightOperator.startsWith(searchLower);
