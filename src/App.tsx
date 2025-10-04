@@ -91,19 +91,11 @@ function App() {
     const flightNumber = String(flight.CHFLTN || '').toLowerCase();
     const flightCode = String(flight.CHOPER || '').toLowerCase();
     const flightOperator = String(flight.CHOPERD || '').toLowerCase();
-    const city = String(flight.CHLOC1T || '').toLowerCase();
-    const country = String(flight.CHLOCCT || '').toLowerCase();
-    const terminal_code = String(flight.CHLOC1 || '').toLowerCase();
-    const terminal_name = String(flight.CHLOC1D || '').toLowerCase();
 
     const matchesSearch = searchTerm === '' ||
-      flightNumber.includes(searchLower) ||
-      flightCode.includes(searchLower) ||
-      flightOperator.includes(searchLower) ||
-      city.includes(searchLower) ||
-      terminal_code.includes(searchLower) ||
-      terminal_name.includes(searchLower) ||
-      country.includes(searchLower);
+      flightNumber.startsWith(searchLower) ||
+      flightCode.startsWith(searchLower) ||
+      flightOperator.startsWith(searchLower);
 
     const matchesType =
       filters.type === 'all' ||
@@ -136,9 +128,7 @@ function App() {
         matchesSearch: matchesSearch,
         flightNumber: flightNumber,
         flightCode: flightCode,
-        flightOperator: flightOperator,
-        city: city,
-        country: country
+        flightOperator: flightOperator
       });
     }
 
@@ -311,7 +301,7 @@ function App() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
               <input
                 type="text"
-                placeholder="Search flights, cities, or countries..."
+                placeholder="Search flight number, code, or airline name..."
                 className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
