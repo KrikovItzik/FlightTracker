@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Plane, Filter } from 'lucide-react';
 import { countryToCode } from './types'; // Assuming this correctly maps country names to codes
 import { PlaneTakeoff, PlaneLanding, Clock } from 'lucide-react';
@@ -35,7 +35,8 @@ function App() {
   const [flights, setFlights] = useState<FlightData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [activeSearchTerm, setActiveSearchTerm] = useState('');
   const [showAllData, setShowAllData] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   const [filters, setFilters] = useState<FilterState>({
@@ -81,21 +82,23 @@ function App() {
   }, []);
 
   useEffect(() => {
-    console.log('Search term changed to:', searchTerm);
     console.log('Total flights loaded:', flights.length);
-  }, [searchTerm, flights.length]);
+  }, [flights.length]);
 
   const filteredFlights = React.useMemo(() => {
     return flights.filter((flight) => {
-    const searchLower = searchTerm.toLowerCase();
-    const flightNumber = String(flight.CHFLTN || '').toLowerCase();
-    const flightCode = String(flight.CHOPER || '').toLowerCase();
-    const flightOperator = String(flight.CHOPERD || '').toLowerCase();
-
-    const matchesSearch = searchTerm === '' || searchTerm.length < 2 ||
-      flightNumber.startsWith(searchLower) ||
-      flightCode.startsWith(searchLower) ||
-      flightOperator.startsWith(searchLower);
+    // Skip search filtering if no active search term
+    let matchesSearch = true;
+    if (activeSearchTerm && activeSearchTerm.length >= 2) {
+      const searchLower = activeSearchTerm.toLowerCase();
+      const flightNumber = String(flight.CHFLTN || '').toLowerCase();
+      const flightCode = String(flight.CHOPER || '').toLowerCase();
+      const flightOperator = String(flight.CHOPERD || '').toLowerCase();
+      
+      matchesSearch = flightNumber.startsWith(searchLower) ||
+        flightCode.startsWith(searchLower) ||
+        flightOperator.startsWith(searchLower);
+    }
 
     const matchesType =
       filters.type === 'all' ||
@@ -120,29 +123,18 @@ function App() {
                       flightDate <= tenDaysFromNow;
     }
 
-    // Debug logging for search
-    if (searchTerm && searchTerm.length > 0 && flights.indexOf(flight) === 0) {
-      console.log('Search debug:', {
-        searchTerm: searchTerm,
-        searchLower: searchLower,
-        matchesSearch: matchesSearch,
-        flightNumber: flightNumber,
-        flightCode: flightCode,
-        flightOperator: flightOperator
-      });
-    }
+    // Removed debug logging for better performance
 
     return matchesSearch && matchesType && matchesStatus && isFutureFlight;
     });
-  }, [flights, searchTerm, filters.type, filters.status, showAllData]);
+  }, [flights, activeSearchTerm, filters.type, filters.status, showAllData]);
 
-  // Debug: log filtering results
-  console.log('Filtering results:', {
-    totalFlights: flights.length,
-    filteredFlights: filteredFlights.length,
-    searchTerm,
-    filters
-  });
+  // Debug: log filtering results (only when activeSearchTerm changes)
+  useEffect(() => {
+    if (activeSearchTerm) {
+      console.log('Search applied:', activeSearchTerm, 'Results:', filteredFlights.length);
+    }
+  }, [activeSearchTerm, filteredFlights.length]);
 
   // Track filtered flights changes
   useEffect(() => {
@@ -177,6 +169,36 @@ function App() {
     }
   };
 
+  // Search functionality
+  const handleSearch = useCallback(() => {
+    const searchValue = searchInputRef.current?.value || '';
+    if (searchValue.length >= 2 || searchValue === '') {
+      setActiveSearchTerm(searchValue);
+    }
+  }, []);
+
+  const handleSearchInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Only show all records if input is completely empty
+    if (value === '') {
+      setActiveSearchTerm('');
+    }
+    // No filtering until user explicitly searches - no state update here!
+  }, []);
+
+  const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  }, [handleSearch]);
+
+  const clearSearch = useCallback(() => {
+    if (searchInputRef.current) {
+      searchInputRef.current.value = '';
+    }
+    setActiveSearchTerm('');
+  }, []);
+
   function getAirlineLogo(choper: string): string {
     // 'https://www.gstatic.com/flights/airline_logos/70px//A4.png' General
     switch (choper) {
@@ -196,8 +218,8 @@ function App() {
     }
   }
 
-  // Mobile Flight Card Component
-  const FlightCard = ({ flight }: { flight: FlightData }) => (
+  // Mobile Flight Card Component (Memoized)
+  const FlightCard = React.memo(({ flight }: { flight: FlightData }) => (
     <div className="bg-white rounded-lg shadow-md p-4 mb-4 border border-gray-200">
       {/* Flight Header */}
       <div className="flex items-center justify-between mb-3">
@@ -256,7 +278,7 @@ function App() {
         </div>
       </div>
     </div>
-  );
+  ));
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -286,7 +308,7 @@ function App() {
               </div>
               <p className="text-sm text-gray-200">
                 Showing: {filteredFlights.length} / {flights.length} flights
-                {searchTerm && ` (searching: "${searchTerm}")`}
+                {activeSearchTerm && ` (searching: "${activeSearchTerm}")`}
               </p>
             </div>
           </div>
@@ -298,18 +320,39 @@ function App() {
         <div className="bg-white rounded-lg shadow-md p-4 mb-6">
           <div className="flex flex-col md:flex-row md:items-center md:space-x-4 space-y-4 md:space-y-0">
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-              <input
-                type="text"
-                placeholder="Search flight number, code, or airline name..."
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+              <div className="flex">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="Search flight number, code, or airline name (min 2 chars)..."
+                    className="w-full pl-10 pr-4 py-2 border border-r-0 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    onChange={handleSearchInput}
+                    onKeyPress={handleKeyPress}
+                  />
+                </div>
+                <button
+                  onClick={handleSearch}
+                  className="px-4 py-2 bg-blue-600 text-white border border-blue-600 rounded-r-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 transition-colors"
+                  title="Search flights"
+                >
+                  Search
+                </button>
+                {activeSearchTerm && (
+                  <button
+                    onClick={clearSearch}
+                    className="ml-2 px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 focus:ring-2 focus:ring-gray-400 transition-colors"
+                    title="Clear search"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="flex space-x-4">
+            <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
               <select
-                className="border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full sm:w-auto"
                 value={filters.type}
                 onChange={(e) => setFilters(prev => ({ ...prev, type: e.target.value as FilterState['type'] }))}
               >
@@ -318,7 +361,7 @@ function App() {
                 <option value="departure">Departures</option>
               </select>
               <select
-                className="border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full sm:w-auto"
                 value={filters.status}
                 onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
               >
@@ -360,7 +403,7 @@ function App() {
           <>
             {/* Desktop Table View - Hidden on mobile */}
             <div className="hidden md:block bg-white rounded-lg shadow-md overflow-x-auto">
-              <table key={`table-${searchTerm}-${filteredFlights.length}`} className="min-w-full table-auto divide-y divide-gray-200">
+              <table key={`table-${activeSearchTerm}-${filteredFlights.length}`} className="min-w-full table-auto divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -394,7 +437,7 @@ function App() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredFlights.map((flight, index) => (
-                    <tr key={`${flight.CHFLTN}-${index}-${searchTerm}`} className="hover:bg-gray-100">
+                    <tr key={`${flight.CHFLTN}-${index}-${activeSearchTerm}`} className="hover:bg-gray-100">
                       <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {flight.CHFLTN}
                       </td>
@@ -450,7 +493,7 @@ function App() {
             {/* Mobile Card View - Visible on mobile */}
             <div className="md:hidden">
               {filteredFlights.map((flight, index) => (
-                <FlightCard key={`${flight.CHFLTN}-${index}-mobile`} flight={flight} />
+                <FlightCard key={`${flight.CHFLTN}-${index}-mobile-${activeSearchTerm}`} flight={flight} />
               ))}
             </div>
           </>
