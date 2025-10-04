@@ -1,7 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plane, Filter } from 'lucide-react';
-import { countryToCode } from './types';
+import { countryToCode } from './types'; // Assuming this correctly maps country names to codes
 import { PlaneTakeoff, PlaneLanding, Clock } from 'lucide-react';
+
+// Assuming FlightData and ApiResponse types are defined in types.ts or similarly
+interface FlightData {
+  CHFLTN: string; // Flight Number
+  CHOPER: string; // Flight Code
+  CHOPERD: string; // Flight Operator Description
+  CHLOC1T: string; // City
+  CHLOCCT: string; // Country
+  CHLOC1: string; // Terminal Code
+  CHLOC1D: string; // Terminal Name
+  CHAORD: 'A' | 'D'; // Arrival or Departure
+  CHRMINE: string; // Status description
+  CHSTOL: string; // Scheduled Time of Landing/Takeoff (e.g., "2025-10-04T12:00:00")
+  CHPTOL: string; // Actual Event Time (e.g., "2025-10-04T12:15:00")
+  // ... other properties you might have
+}
+
+interface ApiResponse {
+  success: boolean;
+  result: {
+    records: FlightData[];
+  };
+}
 
 interface FilterState {
   type: 'all' | 'arrival' | 'departure';
@@ -13,6 +36,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showAllData, setShowAllData] = useState(false);
   const [filters, setFilters] = useState<FilterState>({
     type: 'all',
     status: '',
@@ -25,8 +49,10 @@ function App() {
         'https://data.gov.il/api/3/action/datastore_search?resource_id=e83f763b-b7d7-479e-b172-ae981ddc6de5'
       );
       const data: ApiResponse = await response.json();
-      
+
       if (data.success) {
+        console.log("Fetched flight data:", data.result.records); 
+        console.log("Total flights loaded:", data.result.records.length);
         setFlights(data.result.records);
       } else {
         setError('Failed to fetch flight data');
@@ -38,57 +64,146 @@ function App() {
     }
   };
 
-
-
-const getFlightStatusIcon = (status: string) => {
-  switch (status.toLowerCase()) {
-    case 'departed':
-      return <PlaneTakeoff className="h-8 w-8 text-blue-500" />;
-    case 'landed':
-      return <PlaneLanding className="h-8 w-8 text-green-500" />;
-    default:
-      return <Clock className="h-8 w-8 text-gray-400" />; // Default icon for unknown status
-  }
-};
+  const getFlightStatusIcon = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'departed':
+        return <PlaneTakeoff className="h-8 w-8 text-blue-500" />;
+      case 'landed':
+        return <PlaneLanding className="h-8 w-8 text-green-500" />;
+      default:
+        return <Clock className="h-8 w-8 text-gray-400" />; // Default icon for unknown status
+    }
+  };
 
   useEffect(() => {
     fetchFlights();
   }, []);
 
-  const filteredFlights = flights.filter((flight) => {
+  useEffect(() => {
+    console.log('Search term changed to:', searchTerm);
+    console.log('Total flights loaded:', flights.length);
+  }, [searchTerm, flights.length]);
+
+  const filteredFlights = React.useMemo(() => {
+    return flights.filter((flight) => {
     const searchLower = searchTerm.toLowerCase();
     const flightNumber = String(flight.CHFLTN || '').toLowerCase();
+    const flightCode = String(flight.CHOPER || '').toLowerCase();
     const flightOperator = String(flight.CHOPERD || '').toLowerCase();
     const city = String(flight.CHLOC1T || '').toLowerCase();
     const country = String(flight.CHLOCCT || '').toLowerCase();
     const terminal_code = String(flight.CHLOC1 || '').toLowerCase();
     const terminal_name = String(flight.CHLOC1D || '').toLowerCase();
 
-    const matchesSearch = searchTerm === '' || 
+    const matchesSearch = searchTerm === '' ||
       flightNumber.includes(searchLower) ||
+      flightCode.includes(searchLower) ||
       flightOperator.includes(searchLower) ||
       city.includes(searchLower) ||
       terminal_code.includes(searchLower) ||
       terminal_name.includes(searchLower) ||
       country.includes(searchLower);
 
-    const matchesType = 
-      filters.type === 'all' || 
+    const matchesType =
+      filters.type === 'all' ||
       (filters.type === 'arrival' && flight.CHAORD === 'A') ||
       (filters.type === 'departure' && flight.CHAORD === 'D');
 
     const flightStatus = String(flight.CHRMINE || '').toLowerCase();
-    const matchesStatus = 
+    const matchesStatus =
       !filters.status || flightStatus === filters.status.toLowerCase();
 
-    return matchesSearch && matchesType && matchesStatus;
+    // Date filtering based on checkbox
+    let isFutureFlight = true;
+    if (!showAllData) {
+      // Show only next 10 days
+      const today = new Date();
+      const tenDaysFromNow = new Date();
+      tenDaysFromNow.setDate(today.getDate() + 10);
+      
+      const flightDate = new Date(flight.CHSTOL);
+      isFutureFlight = !isNaN(flightDate.getTime()) && 
+                      flightDate >= today && 
+                      flightDate <= tenDaysFromNow;
+    }
+
+    // Debug logging for search
+    if (searchTerm && searchTerm.length > 0 && flights.indexOf(flight) === 0) {
+      console.log('Search debug:', {
+        searchTerm: searchTerm,
+        searchLower: searchLower,
+        matchesSearch: matchesSearch,
+        flightNumber: flightNumber,
+        flightCode: flightCode,
+        flightOperator: flightOperator,
+        city: city,
+        country: country
+      });
+    }
+
+    return matchesSearch && matchesType && matchesStatus && isFutureFlight;
+    });
+  }, [flights, searchTerm, filters.type, filters.status, showAllData]);
+
+  // Debug: log filtering results
+  console.log('Filtering results:', {
+    totalFlights: flights.length,
+    filteredFlights: filteredFlights.length,
+    searchTerm,
+    filters
   });
+
+  // Track filtered flights changes
+  useEffect(() => {
+    console.log('Filtered flights updated:', filteredFlights.length);
+  }, [filteredFlights]);
 
   const getCountryFlag = (country: string) => {
     const code = countryToCode[country?.toUpperCase()];
     if (!code) return null;
     return `https://flagcdn.com/w20/${code}.png`;
   };
+
+  const formatDateTime = (dateTimeString: string) => {
+    if (!dateTimeString) return 'N/A';
+    
+    try {
+      const date = new Date(dateTimeString);
+      if (isNaN(date.getTime())) return 'Invalid Date';
+      
+      // Format: "Oct 4, 18:15"
+      const options: Intl.DateTimeFormatOptions = {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      };
+      
+      return date.toLocaleDateString('en-US', options);
+    } catch (error) {
+      return 'Invalid Date';
+    }
+  };
+
+  function getAirlineLogo(choper: string): string {
+    // 'https://www.gstatic.com/flights/airline_logos/70px//A4.png' General
+    switch (choper) {
+      case 'LIL':
+        return 'https://www.flylili.com/assets/img/fb_logo.jpg';
+      case 'H4':
+      case 'H7':
+        return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAMAAABF0y+mAAAAZlBMVEVHcEwVOmAaPV/4mSPThyv4mSOWakv4mSP4mSN5XD/9nh8TPmcTPmcSPmcTPmf4mSP4mSP4mSOcbjYTPmf4mSMTPmcTPmcTPmf4mSP4mSP4mSMTPmcTPmcTPmf4mSMTPmcQPWcTPmfCHNupAAAAInRSTlMAEjQXWQ4GeWdxLkWQf9b/R/CI/7hY4nDS4aC7KvORH6TH8hnwgwAAALJJREFUeAHlzceBxCAQBMCWNwiavZb3yj/J47c+gi2Y+YzDj4niCB8kaZYXJVDVMI01sO6hjcw8b0j/0CiA9DBIomSLuobUIYrUY+giazAM8BzTiYXnDKmPYbQ4rZ2aSBsK7iPpd5Ywm3QMCilc6EIXZpZlONuyzoFe5pTWA5cOK4uRPidxI04FcIoXF7KTOoxjXk8twrf95gwuh8HlZrs2rfgsR6cNnxlJXwdX158RfsY/BU8MuvYYNu8AAAAASUVORK5CYII=';
+      case 'OE':
+        return 'https://seatmaps.com/assets/logo/logo-5F.png';
+      case 'A4':
+        return 'https://flydoha.qa/img_airlines/A4.png';
+      case '3E':
+        return 'https://www.electra-airways.com/wp-content/themes/electra/img/icons/large_electra2.jpg';
+      default:
+        return `https://www.gstatic.com/flights/airline_logos/70px//${choper}.png`;
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -107,7 +222,10 @@ const getFlightStatusIcon = (status: string) => {
               >
                 Refresh Data
               </button>
-              <p className="text-sm text-gray-200">Total Flights: {filteredFlights.length}</p>
+              <p className="text-sm text-gray-200">
+                Showing: {filteredFlights.length} / {flights.length} flights
+                {searchTerm && ` (searching: "${searchTerm}")`}
+              </p>
             </div>
           </div>
         </div>
@@ -151,6 +269,21 @@ const getFlightStatusIcon = (status: string) => {
               </select>
             </div>
           </div>
+          
+          {/* Date Range Option */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAllData}
+                onChange={(e) => setShowAllData(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700">
+                Load all flight data (unchecked = next 10 days only)
+              </span>
+            </label>
+          </div>
         </div>
 
         {/* Flights Table */}
@@ -162,95 +295,96 @@ const getFlightStatusIcon = (status: string) => {
         ) : error ? (
           <div className="text-center py-8 text-red-500">{error}</div>
         ) : (
-<div className="bg-white rounded-lg shadow-md w-full">
-  <div className="w-full">
-    <table className="w-full table-fixed divide-y divide-gray-200">
-      <thead className="bg-gray-50">
-        <tr>
-          <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
-            Flight No'
-          </th>
-          <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
-            Flight Code
-          </th>
-          <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
-            Flight Operator
-          </th>
-          <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
-            Country
-          </th>
-          <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
-            City
-          </th>
-          <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
-            Terminal Code
-          </th>
-          <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
-            Terminal
-          </th>
-          <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
-            Scheduled
-          </th>
-          <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
-            Actual
-          </th>
-          <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
-            Status
-          </th>
-        </tr>
-      </thead>
-      <tbody className="bg-white divide-y divide-gray-200">
-        {filteredFlights.map((flight) => (
-          <tr key={flight._id} className="hover:bg-gray-50">
-            <td className="px-2 py-4 whitespace-normal text-sm font-medium text-gray-900">
-              {flight.CHFLTN || '-'}
-            </td>
-            <td className="px-2 py-4 whitespace-normal text-sm text-gray-500">
-              <div className="flex items-center space-x-2">
-                <span>{flight.CHOPER || '-'}</span>
-                <img 
-                  src={`https://www.gstatic.com/flights/airline_logos/70px//${flight.CHOPER}.png`} 
-                  alt="Airline Logo" 
-                  className="w-8 h-8 object-cover" 
-                />
-              </div>
-            </td>
-            <td className="px-2 py-4 whitespace-normal text-sm text-gray-500">
-              {flight.CHOPERD || '-'}
-            </td>
-            <td className="px-2 py-4 whitespace-normal text-sm text-gray-500">
-              <div className="flex items-center space-x-2">
-                {getCountryFlag(flight.CHLOCCT) && (
-                  <img src={getCountryFlag(flight.CHLOCCT)} alt={`${flight.CHLOCCT} flag`} className="w-6 h-4 object-cover"/>
-                )}
-                <span>{flight.CHLOCCT || '-'}</span>
-              </div>
-            </td>
-            <td className="px-2 py-4 whitespace-normal text-sm text-gray-500">
-              {flight.CHLOC1T || '-'}
-            </td>
-            <td className="px-2 py-4 whitespace-normal text-sm text-gray-500">
-              {flight.CHLOC1 || '-'}
-            </td>
-            <td className="px-2 py-4 whitespace-normal text-sm text-gray-500">
-              {flight.CHLOC1D || '-'}
-            </td>
-            <td className="px-2 py-4 whitespace-normal text-sm text-gray-500">
-              {flight.CHSTOL || '-'}
-            </td>
-            <td className="px-2 py-4 whitespace-normal text-sm text-gray-500">
-              {flight.CHPTOL || '-'}
-            </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {getFlightStatusIcon(flight.CHRMINE)}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-</div>
- )}
+          <div className="bg-white rounded-lg shadow-md overflow-x-auto">
+            <table key={`table-${searchTerm}-${filteredFlights.length}`} className="min-w-full table-auto divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Flight No'
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Flight Code
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Flight Operator
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Country
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    City
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Terminal Code
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Terminal
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Timing {/* Changed header text here */}
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredFlights.map((flight, index) => (
+                  <tr key={`${flight.CHFLTN}-${index}-${searchTerm}`} className="hover:bg-gray-100">
+                    <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {flight.CHFLTN}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {flight.CHOPER || '-'}
+                    </td>
+                    <td className="px-2 py-4 whitespace-normal text-sm text-gray-500">
+                      <div className="flex items-center space-x-2">
+                        <img
+                          src={getAirlineLogo(flight.CHOPER || '')}
+                          alt="Airline Logo"
+                          className="w-12 h-12 object-cover"
+                        />
+                        <span>{flight.CHOPERD || '-'}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <div className="flex items-center">
+                        {getCountryFlag(flight.CHLOCCT) && (
+                          <img src={getCountryFlag(flight.CHLOCCT) as string} alt={`${flight.CHLOCCT} flag`} className="w-6 h-4 object-cover border border-gray-800" />
+                        )}
+                        <span className="ml-1">{flight.CHLOCCT}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {flight.CHLOC1T}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {flight.CHLOC1}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {flight.CHLOC1D}
+                    </td>
+                    {/* Combined Scheduled and Actual Time - formatted */}
+                    <td className="px-3 py-4 text-sm text-gray-700">
+                      <div className="flex flex-col">
+                        <span>ST: {formatDateTime(flight.CHSTOL)}</span>
+                        {flight.CHPTOL && flight.CHPTOL !== '' && (
+                          <span className="font-semibold text-blue-700">AT: {formatDateTime(flight.CHPTOL)}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <div className="flex items-center space-x-2">
+                        {getFlightStatusIcon(flight.CHRMINE || 'unknown')}
+                        {/* Removed: <span>{flight.CHRMINE}</span> */}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
