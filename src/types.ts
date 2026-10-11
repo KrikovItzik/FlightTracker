@@ -145,4 +145,5 @@ export const countryToCode: { [key: string]: string } = {
   'BURUNDI': 'bi',
   'RWANDA': 'rw',
   'DJIBOUTI': 'dj',
+  'SLOVAKIA': 'sk',
 };
